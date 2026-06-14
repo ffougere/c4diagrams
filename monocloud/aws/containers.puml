@@ -1,0 +1,72 @@
+@startuml aws-containers
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram – AWS Serverless SaaS Platform
+
+Person(end_user, "End User", "Accesses the SaaS application.")
+Person(tenant_admin, "Tenant Admin", "Manages workspace settings.")
+Person(platform_ops, "Platform Operator", "Monitors the platform.")
+
+System_Ext(idp, "Enterprise Identity Provider", "Corporate SSO (Okta / Azure AD).")
+System_Ext(marketplace, "AWS Marketplace", "Subscription billing.")
+System_Ext(webhook_target, "Customer Webhook Endpoint", "Receives event notifications.")
+
+System_Boundary(aws, "AWS Serverless SaaS Platform") {
+
+    Container(cloudfront, "CDN & Edge", "Amazon CloudFront + WAF", "Delivers the SPA globally with DDoS protection and SSL termination.")
+    Container(spa, "Single-Page Application", "React / TypeScript", "Browser-based SaaS frontend served from S3 via CloudFront.")
+    ContainerDb(spa_assets, "Static Assets", "Amazon S3", "Hosts compiled SPA bundles and public assets.")
+
+    Container(cognito, "Identity Service", "Amazon Cognito (User Pools + Identity Pools)", "Manages user sign-up, sign-in, MFA, and SAML/OIDC federation with enterprise IdPs.")
+    Container(apigw, "API Gateway", "Amazon API Gateway (REST)", "Exposes backend Lambda functions as HTTPS endpoints; validates JWT authorisers.")
+
+    Container(core_api, "Core API", "AWS Lambda – Node.js / TypeScript", "Handles CRUD operations for tenants, users, and resources.")
+    Container(billing_svc, "Billing Service", "AWS Lambda – Python", "Integrates with AWS Marketplace for subscription lifecycle events.")
+    Container(notification_svc, "Notification Service", "AWS Lambda – Node.js", "Fans out domain events to customer webhook endpoints and internal queues.")
+    Container(export_svc, "Export Service", "AWS Lambda – Python", "Generates async data exports (CSV, XLSX) stored in S3.")
+
+    ContainerDb(main_db, "Application Database", "Amazon DynamoDB", "Multi-tenant data store with partition isolation per tenant.")
+    ContainerDb(analytics_db, "Analytics Store", "Amazon Aurora Serverless (PostgreSQL)", "Powers complex reporting queries and aggregations.")
+    ContainerDb(export_store, "Export Storage", "Amazon S3", "Stores generated export files accessible via pre-signed URLs.")
+
+    Container(eventbus, "Event Bus", "Amazon EventBridge", "Routes domain events between services and triggers Lambda targets.")
+    Container(queue, "Work Queue", "Amazon SQS", "Decouples async tasks such as export jobs and webhook retries.")
+    Container(secrets, "Secrets Manager", "AWS Secrets Manager", "Stores database credentials, API keys, and tenant secrets.")
+
+    Container(monitor, "Observability", "Amazon CloudWatch + X-Ray", "Collects Lambda logs, metrics, distributed traces, and alerts.")
+    Container(waf, "Web Application Firewall", "AWS WAF", "Blocks common web exploits and rate-limits API requests.")
+}
+
+Rel(end_user, cloudfront, "Accesses the app", "HTTPS")
+Rel(tenant_admin, cloudfront, "Manages workspace", "HTTPS")
+Rel(cloudfront, waf, "Filters requests", "internal")
+Rel(cloudfront, spa_assets, "Serves SPA bundle", "HTTPS")
+Rel(cloudfront, apigw, "Proxies API calls", "HTTPS")
+
+Rel(spa, apigw, "API calls", "HTTPS / REST")
+Rel(apigw, cognito, "Validates JWT tokens", "HTTPS / JWKS")
+Rel(cognito, idp, "Federates SSO", "SAML / OIDC")
+
+Rel(apigw, core_api, "Invokes Lambda", "AWS internal")
+Rel(apigw, billing_svc, "Invokes billing Lambda", "AWS internal")
+
+Rel(core_api, main_db, "Reads / writes tenant data", "AWS SDK / TLS")
+Rel(core_api, analytics_db, "Writes analytics events", "TLS")
+Rel(core_api, eventbus, "Publishes domain events", "AWS SDK")
+Rel(core_api, secrets, "Retrieves secrets", "AWS SDK / TLS")
+
+Rel(billing_svc, marketplace, "Syncs entitlements", "HTTPS / AWS Marketplace API")
+Rel(billing_svc, eventbus, "Publishes billing events", "AWS SDK")
+
+Rel(eventbus, notification_svc, "Triggers on domain events", "AWS internal")
+Rel(eventbus, queue, "Enqueues async work", "AWS internal")
+Rel(queue, export_svc, "Triggers export jobs", "AWS internal")
+
+Rel(notification_svc, webhook_target, "Delivers notifications", "HTTPS / REST")
+Rel(export_svc, export_store, "Writes export files", "AWS SDK / TLS")
+
+Rel(platform_ops, monitor, "Monitors metrics and traces", "HTTPS / Console")
+
+@enduml

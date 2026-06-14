@@ -1,0 +1,62 @@
+@startuml genai-components
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram – RAG Orchestrator (GenAI Platform)
+
+Container_Ext(chat_api, "Chat API", "FastAPI", "Receives user queries and streams responses.")
+Container_Ext(embedding_svc, "Embedding Service", "Python service", "Returns dense vector embeddings for text inputs.")
+Container_Ext(vector_store, "Vector Store", "Azure AI Search", "Hybrid retrieval: keyword + vector search with reranking.")
+Container_Ext(metadata_db, "Metadata Database", "Azure Cosmos DB", "Stores conversation history and document metadata.")
+Container_Ext(cache, "Semantic Cache", "Azure Cache for Redis", "Caches recent query embeddings and completions.")
+Container_Ext(llm_api, "LLM API", "Azure OpenAI GPT-4o", "Generates text completions from structured prompts.")
+
+Container_Boundary(orchestrator, "RAG Orchestrator") {
+
+    Component(query_handler, "Query Handler", "Python / async", "Entry point: receives the user query and conversation history, then kicks off the pipeline.")
+    Component(query_expander, "Query Expander", "Python / LangChain", "Generates sub-queries and HyDE (Hypothetical Document Embeddings) variants to improve recall.")
+    Component(cache_checker, "Cache Checker", "Python", "Computes query embedding, checks the semantic cache for a near-identical prior answer.")
+    Component(retriever, "Hybrid Retriever", "Python / Azure SDK", "Executes keyword + vector search against Azure AI Search; requests top-k candidate chunks.")
+    Component(reranker, "Cross-Encoder Reranker", "Python / sentence-transformers", "Re-scores retrieved chunks by relevance to the original query; prunes low-scoring passages.")
+    Component(context_builder, "Context Builder", "Python", "Assembles the retrieved passages into a structured context block respecting the LLM token budget.")
+    Component(prompt_builder, "Prompt Builder", "Python / Jinja2", "Renders the system prompt, conversation history, context, and current query into the final prompt.")
+    Component(llm_caller, "LLM Caller", "Python / OpenAI SDK", "Calls the LLM completion endpoint, handles streaming tokens, retries, and token-usage logging.")
+    Component(citation_extractor, "Citation Extractor", "Python / regex", "Parses the LLM response to extract inline citations and maps them to source document metadata.")
+    Component(response_streamer, "Response Streamer", "Python / SSE", "Streams answer tokens and citations back to the Chat API as Server-Sent Events.")
+    Component(history_manager, "Conversation History Manager", "Python", "Persists and retrieves multi-turn conversation context from the metadata database.")
+    Component(guardrails, "Guardrails", "Python / Azure Content Safety API", "Screens user inputs and LLM outputs for harmful content, PII, and prompt-injection attempts.")
+}
+
+' ── External inputs ────────────────────────────────────────────────────────
+Rel(chat_api, query_handler, "Passes query + history", "gRPC / internal")
+
+' ── Internal pipeline flow ─────────────────────────────────────────────────
+Rel(query_handler, guardrails, "Screens user input", "internal")
+Rel(query_handler, history_manager, "Fetches conversation history", "internal")
+Rel(query_handler, cache_checker, "Checks semantic cache", "internal")
+Rel(cache_checker, embedding_svc, "Embeds query for cache lookup", "HTTPS")
+Rel(cache_checker, cache, "Looks up cached result", "TLS")
+
+Rel(query_handler, query_expander, "Expands query on cache miss", "internal")
+Rel(query_expander, embedding_svc, "Embeds expanded queries", "HTTPS")
+Rel(query_expander, retriever, "Passes query variants", "internal")
+
+Rel(retriever, vector_store, "Executes hybrid search", "HTTPS / Azure SDK")
+Rel(retriever, reranker, "Sends candidate chunks", "internal")
+Rel(reranker, context_builder, "Passes reranked passages", "internal")
+
+Rel(context_builder, prompt_builder, "Passes structured context", "internal")
+Rel(history_manager, prompt_builder, "Provides conversation turns", "internal")
+Rel(prompt_builder, llm_caller, "Sends final prompt", "internal")
+Rel(llm_caller, guardrails, "Screens LLM output", "internal")
+Rel(llm_caller, llm_api, "Calls completion endpoint (streaming)", "HTTPS / REST")
+
+Rel(llm_caller, citation_extractor, "Passes raw completion", "internal")
+Rel(citation_extractor, response_streamer, "Streams annotated answer", "internal")
+Rel(response_streamer, chat_api, "Streams tokens via SSE", "gRPC / internal")
+
+Rel(history_manager, metadata_db, "Reads / writes history", "HTTPS / Azure SDK")
+Rel(cache_checker, cache, "Writes cache entry on cache miss", "TLS")
+
+@enduml

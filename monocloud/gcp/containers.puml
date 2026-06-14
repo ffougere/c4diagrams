@@ -1,0 +1,62 @@
+@startuml gcp-containers
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram – GCP Data Analytics Platform
+
+Person(analyst, "Data Analyst", "Runs queries and explores data.")
+Person(engineer, "Data Engineer", "Builds and maintains pipelines.")
+
+System_Ext(erp, "ERP System", "Transactional source data.")
+System_Ext(crm, "CRM System", "Customer source data.")
+System_Ext(events, "Event Streams", "Real-time web/mobile events.")
+System_Ext(bi_tool, "BI Tool", "Looker / Tableau dashboards.")
+
+System_Boundary(gcp, "GCP Data Analytics Platform") {
+
+    Container(ingestion_batch, "Batch Ingestion", "Cloud Composer (Apache Airflow)", "Orchestrates scheduled batch loads from ERP and CRM systems into the raw zone.")
+    Container(ingestion_stream, "Stream Ingestion", "Cloud Dataflow (Apache Beam)", "Consumes real-time events from Pub/Sub and writes to the raw zone.")
+    Container(pubsub, "Message Bus", "Cloud Pub/Sub", "Durable, scalable event streaming between producers and consumers.")
+
+    ContainerDb(raw_zone, "Raw Zone", "Cloud Storage (GCS) – Parquet / JSON", "Landing zone for unprocessed source data.")
+    ContainerDb(curated_zone, "Curated Zone", "BigQuery – internal tables", "Cleansed, conformed, and enriched datasets (silver layer).")
+    ContainerDb(mart_zone, "Data Mart Zone", "BigQuery – authorised views", "Aggregated, business-ready datasets (gold layer) exposed to BI tools.")
+
+    Container(transform, "Transformation Engine", "Cloud Dataflow / dbt on Cloud Run", "Applies data quality rules, joins, and aggregations across zones.")
+    Container(metadata, "Data Catalogue", "Dataplex / Data Catalog", "Manages schema registry, lineage, and governance policies.")
+
+    Container(notebook, "Notebook Environment", "Vertex AI Workbench (JupyterLab)", "Interactive environment for data exploration and ML prototyping.")
+    Container(ml_pipeline, "ML Pipeline", "Vertex AI Pipelines", "Trains, evaluates, and deploys machine-learning models.")
+    ContainerDb(feature_store, "Feature Store", "Vertex AI Feature Store", "Centralised store for ML features with online and offline serving.")
+
+    Container(api, "Analytics API", "Cloud Run – Python / FastAPI", "Serves curated data to internal applications via REST endpoints.")
+    Container(iam, "Identity & Access", "Cloud IAM + VPC Service Controls", "Fine-grained access control for all GCP services.")
+    Container(monitor, "Observability", "Cloud Monitoring + Cloud Logging", "Collects pipeline metrics, alerts, and audit logs.")
+}
+
+Rel(erp, ingestion_batch, "Exports batch files", "SFTP / GCS Transfer")
+Rel(crm, ingestion_batch, "Exports batch files", "SFTP / GCS Transfer")
+Rel(events, pubsub, "Publishes clickstream events", "HTTPS / gRPC")
+
+Rel(ingestion_batch, raw_zone, "Writes raw files", "GCS API")
+Rel(pubsub, ingestion_stream, "Delivers events", "internal")
+Rel(ingestion_stream, raw_zone, "Writes raw events", "GCS API")
+
+Rel(raw_zone, transform, "Reads raw data", "BigQuery / GCS API")
+Rel(transform, curated_zone, "Writes cleansed data", "BigQuery API")
+Rel(curated_zone, transform, "Reads silver tables for aggregation", "BigQuery API")
+Rel(transform, mart_zone, "Writes gold-layer marts", "BigQuery API")
+
+Rel(transform, metadata, "Registers lineage and schema", "Dataplex API")
+
+Rel(mart_zone, bi_tool, "Serves datasets", "BigQuery API")
+Rel(mart_zone, api, "Feeds analytics endpoints", "BigQuery API")
+Rel(api, analyst, "Provides programmatic access", "HTTPS / REST")
+
+Rel(curated_zone, feature_store, "Materialises features", "Vertex AI API")
+Rel(feature_store, ml_pipeline, "Serves training features", "Vertex AI API")
+Rel(notebook, curated_zone, "Reads data for exploration", "BigQuery API")
+Rel(notebook, ml_pipeline, "Submits pipeline runs", "Vertex AI API")
+
+@enduml

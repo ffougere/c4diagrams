@@ -1,0 +1,82 @@
+@startuml multicloud-containers
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram – Multi-Cloud Financial Services Platform
+
+Person(retail_customer, "Retail Customer", "Performs banking operations.")
+Person(corporate_user, "Corporate User", "Accesses treasury & payments.")
+Person(ops_team, "Operations Team", "Monitors all clouds.")
+
+System_Ext(swift, "SWIFT Network", "Interbank messaging.")
+System_Ext(open_banking, "Open Banking APIs", "PSD2 financial data.")
+System_Ext(regulator, "Regulatory System", "Compliance reporting.")
+System_Ext(fraud_partner, "Fraud Intelligence Network", "Real-time fraud signals.")
+
+' ─── AZURE (Primary) ────────────────────────────────────────────────────────
+System_Boundary(azure, "Azure – Primary Region (West Europe)") {
+    Container(az_apim, "Global API Gateway", "Azure API Management", "Single entry point; routes to primary (Azure) or secondary (AWS) based on health probes.")
+    Container(az_identity, "Identity Service", "Azure AD B2C + Conditional Access", "Customer and corporate identity with MFA and risk-based policies.")
+    Container(az_core_banking, "Core Banking Service", "AKS – Java / Spring Boot", "Manages accounts, balances, and transactions.")
+    Container(az_payments, "Payments Service", "AKS – Java / Spring Boot", "Orchestrates domestic and cross-border payments via SWIFT.")
+    ContainerDb(az_core_db, "Core Banking DB", "Azure SQL Hyperscale (geo-redundant)", "Primary store for accounts and transaction ledger.")
+    ContainerDb(az_event_store, "Event Store", "Azure Cosmos DB – change feed", "Immutable event log for all financial operations.")
+    Container(az_bus, "Event Bus", "Azure Service Bus Premium", "Cross-service messaging with geo-failover.")
+    Container(az_keyvault, "Key Vault", "Azure Key Vault HSM", "Encryption keys, certificates, and HSM-backed secrets.")
+    Container(az_monitor, "Azure Observability", "Azure Monitor + Sentinel", "Logs, metrics, and SIEM for the primary region.")
+}
+
+' ─── AWS (Secondary / DR) ───────────────────────────────────────────────────
+System_Boundary(aws, "AWS – Secondary Region (eu-west-1) – Disaster Recovery") {
+    Container(aws_nlb, "Network Load Balancer", "AWS NLB + Route 53", "Receives failover traffic when Azure primary is unhealthy.")
+    Container(aws_core_banking, "Core Banking Service (Standby)", "EKS – Java / Spring Boot", "Hot-standby replica; promoted to active during failover.")
+    ContainerDb(aws_core_db, "Core Banking DB Replica", "Amazon Aurora (PostgreSQL) – cross-region replica", "Read replica of the primary ledger; writable after failover.")
+    Container(aws_secrets, "Secrets Manager", "AWS Secrets Manager", "Replicates secrets from Azure Key Vault for DR operations.")
+    Container(aws_monitor, "AWS Observability", "Amazon CloudWatch + GuardDuty", "Logs and security monitoring for the DR region.")
+}
+
+' ─── GCP (Analytics & AI) ───────────────────────────────────────────────────
+System_Boundary(gcp, "GCP – Analytics & AI Region (europe-west4)") {
+    Container(gcp_ingest, "Event Ingestion", "Cloud Dataflow (Apache Beam)", "Consumes events from Azure Event Hubs and lands them in the data lake.")
+    ContainerDb(gcp_lake, "Financial Data Lake", "BigQuery + Cloud Storage", "Immutable, partitioned store for all financial events and derived datasets.")
+    Container(gcp_fraud, "Real-Time Fraud Detection", "Vertex AI – online prediction endpoint", "Scores transactions in < 50 ms using an ML model trained on historical data.")
+    Container(gcp_reporting, "Regulatory Reporting", "Cloud Run – Python", "Generates compliance reports from BigQuery and submits to regulators.")
+    Container(gcp_monitor, "GCP Observability", "Cloud Monitoring + Chronicle (SIEM)", "Logs, metrics, and advanced threat detection for the analytics region.")
+}
+
+' ─── CROSS-CLOUD CONNECTIVITY ───────────────────────────────────────────────
+' Azure <-> AWS
+Rel(az_event_store, aws_core_db, "Replicates events for DR", "Azure Event Hubs → AWS DMS / TLS")
+Rel(az_keyvault, aws_secrets, "Syncs secrets for DR", "HTTPS / Vault replication")
+Rel(az_apim, aws_nlb, "Redirects traffic on failover", "HTTPS / health probe")
+
+' Azure <-> GCP
+Rel(az_event_store, gcp_ingest, "Streams financial events to analytics", "Azure Event Hubs → Pub/Sub bridge / TLS")
+
+' Internal Azure
+Rel(retail_customer, az_apim, "Accesses banking portal", "HTTPS")
+Rel(corporate_user, az_apim, "Accesses treasury portal", "HTTPS / mTLS")
+Rel(az_apim, az_identity, "Authenticates requests", "HTTPS / OIDC")
+Rel(az_apim, az_core_banking, "Routes account API calls", "HTTPS")
+Rel(az_apim, az_payments, "Routes payment API calls", "HTTPS")
+Rel(az_core_banking, az_core_db, "Reads / writes ledger", "TLS")
+Rel(az_core_banking, az_event_store, "Appends domain events", "AMQP / TLS")
+Rel(az_payments, az_bus, "Publishes payment events", "AMQP")
+Rel(az_payments, swift, "Sends/receives interbank messages", "SWIFT / MQ")
+Rel(az_payments, open_banking, "Fetches open banking data", "HTTPS / OAuth2")
+
+' Internal GCP
+Rel(gcp_ingest, gcp_lake, "Writes to data lake", "GCS / BigQuery API")
+Rel(gcp_lake, gcp_fraud, "Provides feature data", "BigQuery ML / Vertex AI")
+Rel(az_payments, gcp_fraud, "Scores transactions in real-time", "HTTPS / REST")
+Rel(gcp_fraud, fraud_partner, "Enriches with threat signals", "HTTPS / REST")
+Rel(gcp_lake, gcp_reporting, "Reads datasets for reports", "BigQuery API")
+Rel(gcp_reporting, regulator, "Submits compliance reports", "HTTPS / SFTP")
+
+' Ops
+Rel(ops_team, az_monitor, "Monitors Azure region", "HTTPS")
+Rel(ops_team, aws_monitor, "Monitors AWS DR region", "HTTPS")
+Rel(ops_team, gcp_monitor, "Monitors GCP analytics region", "HTTPS")
+
+@enduml

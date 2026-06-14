@@ -1,0 +1,71 @@
+@startuml azure-containers
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram – Azure E-Commerce Platform
+
+Person(customer, "Customer", "Browses and purchases products.")
+Person(admin, "Back-Office Admin", "Manages inventory and orders.")
+
+System_Ext(payment, "Payment Gateway", "Third-party payment processor.")
+System_Ext(shipping, "Shipping Provider", "External logistics API.")
+System_Ext(email, "Email Service", "Transactional email (SendGrid).")
+
+System_Boundary(azure, "Azure E-Commerce Platform") {
+
+    Container(cdn, "Azure CDN", "Azure CDN / Front Door", "Serves static assets and routes traffic to the closest region.")
+    Container(spa, "Single-Page Application", "React / TypeScript", "Customer-facing storefront delivered via the browser.")
+    Container(admin_ui, "Admin Portal", "React / TypeScript", "Back-office interface for product and order management.")
+
+    Container(apim, "API Gateway", "Azure API Management", "Centralises authentication, rate-limiting, and routing to back-end services.")
+
+    Container(catalog_svc, "Catalogue Service", "Azure Container Apps · Node.js", "Manages product listings, search, and categories.")
+    Container(order_svc, "Order Service", "Azure Container Apps · Java / Spring Boot", "Handles cart, checkout, and order lifecycle.")
+    Container(user_svc, "User Service", "Azure Container Apps · Python / FastAPI", "Manages authentication, profiles, and addresses.")
+    Container(notification_svc, "Notification Service", "Azure Container Apps · Node.js", "Dispatches email and push notifications.")
+
+    ContainerDb(product_db, "Product Database", "Azure Cosmos DB (NoSQL)", "Stores product catalogue, inventory counts, and pricing.")
+    ContainerDb(order_db, "Order Database", "Azure SQL Database", "Stores orders, line items, and payment records.")
+    ContainerDb(user_db, "User Database", "Azure SQL Database", "Stores user accounts, addresses, and credentials.")
+
+    Container(cache, "Distributed Cache", "Azure Cache for Redis", "Caches product data and session tokens.")
+    Container(storage, "Blob Storage", "Azure Blob Storage", "Stores product images, invoices, and exported reports.")
+    Container(bus, "Message Bus", "Azure Service Bus", "Asynchronous communication between microservices.")
+    Container(search, "Full-Text Search", "Azure Cognitive Search", "Powers product search with faceting and ranking.")
+
+    Container(identity, "Identity Provider", "Azure AD B2C", "OAuth 2.0 / OpenID Connect authentication for customers and admins.")
+    Container(keyvault, "Key Vault", "Azure Key Vault", "Centrally stores secrets, connection strings, and certificates.")
+    Container(monitor, "Observability", "Azure Monitor / App Insights", "Collects logs, metrics, and distributed traces.")
+}
+
+Rel(customer, cdn, "Accesses storefront", "HTTPS")
+Rel(admin, cdn, "Accesses admin portal", "HTTPS")
+Rel(cdn, spa, "Serves static SPA assets", "HTTPS")
+Rel(cdn, admin_ui, "Serves admin portal assets", "HTTPS")
+
+Rel(spa, apim, "API calls", "HTTPS / REST")
+Rel(admin_ui, apim, "API calls", "HTTPS / REST")
+Rel(apim, identity, "Validates JWT tokens", "HTTPS / OIDC")
+
+Rel(apim, catalog_svc, "Routes catalogue requests", "HTTPS")
+Rel(apim, order_svc, "Routes order requests", "HTTPS")
+Rel(apim, user_svc, "Routes user requests", "HTTPS")
+
+Rel(catalog_svc, product_db, "Reads / writes products", "TLS")
+Rel(catalog_svc, cache, "Caches product listings", "TLS")
+Rel(catalog_svc, search, "Indexes products", "HTTPS")
+Rel(catalog_svc, storage, "Stores product images", "HTTPS")
+
+Rel(order_svc, order_db, "Reads / writes orders", "TLS")
+Rel(order_svc, bus, "Publishes order events", "AMQP")
+Rel(order_svc, payment, "Processes payments", "HTTPS")
+
+Rel(user_svc, user_db, "Reads / writes users", "TLS")
+Rel(user_svc, identity, "Manages identities", "HTTPS")
+
+Rel(bus, notification_svc, "Delivers order events", "AMQP")
+Rel(notification_svc, email, "Sends emails", "HTTPS")
+Rel(order_svc, shipping, "Requests shipment", "HTTPS")
+
+@enduml

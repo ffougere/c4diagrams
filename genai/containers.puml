@@ -1,0 +1,75 @@
+@startuml genai-containers
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram – GenAI RAG Platform
+
+Person(end_user, "End User", "Asks questions via chat interface.")
+Person(knowledge_admin, "Knowledge Admin", "Manages source documents.")
+Person(platform_eng, "Platform Engineer", "Operates and monitors the platform.")
+
+System_Ext(llm_api, "LLM API", "Azure OpenAI / Gemini / Claude – completions & embeddings.")
+System_Ext(doc_source, "Document Sources", "SharePoint, Confluence, S3, local files.")
+System_Ext(auth_provider, "Identity Provider", "Azure AD / Okta – OAuth2 / OIDC.")
+
+System_Boundary(rag, "GenAI RAG Platform") {
+
+    ' ── Frontend ───────────────────────────────────────────────────────────
+    Container(chat_ui, "Chat Interface", "React / TypeScript – Azure Static Web Apps", "Browser-based conversational UI. Displays streamed answers with source citations.")
+    Container(admin_ui, "Admin Portal", "React / TypeScript – Azure Static Web Apps", "Allows knowledge admins to upload documents, trigger re-indexing, and review usage metrics.")
+
+    ' ── API layer ──────────────────────────────────────────────────────────
+    Container(api_gateway, "API Gateway", "Azure API Management", "Handles authentication, rate-limiting, and routing to backend services.")
+    Container(chat_api, "Chat API", "Azure Container Apps – Python / FastAPI", "Receives user queries, orchestrates retrieval and generation, streams responses via SSE.")
+    Container(ingestion_api, "Ingestion API", "Azure Container Apps – Python / FastAPI", "Accepts document uploads and triggers the ingestion pipeline.")
+
+    ' ── Orchestration & RAG core ───────────────────────────────────────────
+    Container(orchestrator, "RAG Orchestrator", "Azure Container Apps – LangChain / Semantic Kernel", "Implements the retrieve-then-generate pipeline: query expansion, retrieval, reranking, prompt construction, and LLM call.")
+    Container(embedding_svc, "Embedding Service", "Azure Container Apps – Python", "Calls the LLM API embedding endpoint to convert text chunks into dense vectors.")
+
+    ' ── Ingestion pipeline ─────────────────────────────────────────────────
+    Container(ingestion_worker, "Ingestion Worker", "Azure Container Apps Job – Python", "Extracts, cleans, chunks, and embeds documents; writes to the vector store and metadata store.")
+
+    ' ── Storage ────────────────────────────────────────────────────────────
+    ContainerDb(vector_store, "Vector Store", "Azure AI Search (with vector index)", "Stores dense vector embeddings and supports hybrid (keyword + vector) retrieval with reranking.")
+    ContainerDb(doc_store, "Document Store", "Azure Blob Storage", "Stores original documents and intermediate chunked text for audit and re-ingestion.")
+    ContainerDb(metadata_db, "Metadata Database", "Azure Cosmos DB (NoSQL)", "Tracks document metadata, ingestion status, chunk inventory, and user conversation history.")
+    ContainerDb(cache, "Semantic Cache", "Azure Cache for Redis", "Caches embeddings and frequent query results to reduce LLM API latency and cost.")
+
+    ' ── Observability & governance ─────────────────────────────────────────
+    Container(eval_svc, "Evaluation Service", "Azure Container Apps – Python / promptflow", "Runs automated RAG quality evaluations: groundedness, relevance, and faithfulness scoring.")
+    Container(monitor, "Observability", "Azure Monitor + Application Insights", "Collects traces, token usage, latency metrics, and LLM output logs for cost and quality governance.")
+}
+
+' ── External relations ─────────────────────────────────────────────────────
+Rel(end_user, chat_ui, "Chats with the assistant", "HTTPS")
+Rel(knowledge_admin, admin_ui, "Manages knowledge base", "HTTPS")
+Rel(platform_eng, monitor, "Reviews quality and cost metrics", "HTTPS")
+
+Rel(chat_ui, api_gateway, "Sends queries", "HTTPS / REST + SSE")
+Rel(admin_ui, api_gateway, "Manages documents", "HTTPS / REST")
+Rel(api_gateway, auth_provider, "Validates JWT tokens", "HTTPS / OIDC")
+Rel(api_gateway, chat_api, "Routes chat requests", "HTTPS")
+Rel(api_gateway, ingestion_api, "Routes ingestion requests", "HTTPS")
+
+Rel(chat_api, orchestrator, "Delegates RAG pipeline", "gRPC / internal")
+Rel(orchestrator, cache, "Checks / writes semantic cache", "TLS")
+Rel(orchestrator, vector_store, "Retrieves top-k chunks", "HTTPS / Azure SDK")
+Rel(orchestrator, embedding_svc, "Embeds user query", "HTTPS / internal")
+Rel(orchestrator, llm_api, "Generates grounded answer", "HTTPS / REST (streaming)")
+Rel(embedding_svc, llm_api, "Calls embedding endpoint", "HTTPS / REST")
+Rel(orchestrator, metadata_db, "Reads/writes conversation history", "HTTPS / Azure SDK")
+
+Rel(ingestion_api, ingestion_worker, "Triggers ingestion job", "Azure Queue / HTTP")
+Rel(ingestion_worker, doc_source, "Pulls source documents", "HTTPS / SDK")
+Rel(ingestion_worker, doc_store, "Stores raw & chunked documents", "HTTPS / Azure SDK")
+Rel(ingestion_worker, embedding_svc, "Embeds document chunks", "HTTPS / internal")
+Rel(ingestion_worker, vector_store, "Upserts vector embeddings", "HTTPS / Azure SDK")
+Rel(ingestion_worker, metadata_db, "Updates ingestion metadata", "HTTPS / Azure SDK")
+
+Rel(eval_svc, orchestrator, "Runs evaluation queries", "HTTPS / internal")
+Rel(eval_svc, monitor, "Publishes quality scores", "HTTPS / Azure SDK")
+Rel(chat_api, monitor, "Emits traces and token usage", "HTTPS / Azure SDK")
+
+@enduml

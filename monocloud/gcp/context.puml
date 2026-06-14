@@ -1,0 +1,28 @@
+@startuml gcp-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context – GCP Data Analytics Platform
+
+Person(analyst, "Data Analyst", "Explores datasets, builds dashboards, and runs ad-hoc queries.")
+Person(engineer, "Data Engineer", "Designs and operates ingestion pipelines and data models.")
+Person(stakeholder, "Business Stakeholder", "Consumes reports and KPI dashboards.")
+
+System(analytics, "Data Analytics Platform", "Ingests, processes, and serves data for business intelligence and machine-learning use-cases. Hosted on Google Cloud Platform.")
+
+System_Ext(erp, "ERP System", "Source of transactional data (e.g. SAP, Oracle).")
+System_Ext(crm, "CRM System", "Customer interaction data (e.g. Salesforce).")
+System_Ext(events, "Event Streams", "Real-time event data from web & mobile apps.")
+System_Ext(bi_tool, "BI Tool", "Data visualisation layer (e.g. Looker, Tableau).")
+
+Rel(analyst, analytics, "Queries data and builds models", "HTTPS")
+Rel(engineer, analytics, "Manages pipelines and schemas", "HTTPS / SDK")
+Rel(stakeholder, bi_tool, "Views reports and dashboards", "HTTPS")
+
+Rel(erp, analytics, "Pushes transactional data", "SFTP / Pub/Sub")
+Rel(crm, analytics, "Pushes customer records", "REST / Pub/Sub")
+Rel(events, analytics, "Streams clickstream events", "Pub/Sub")
+Rel(analytics, bi_tool, "Exposes curated datasets", "BigQuery API")
+
+@enduml
