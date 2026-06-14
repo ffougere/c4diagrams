@@ -1,0 +1,26 @@
+@startuml genai-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context – GenAI RAG Platform (Retrieval-Augmented Generation)
+
+Person(end_user, "End User", "Asks natural-language questions and receives grounded, cited answers.")
+Person(knowledge_admin, "Knowledge Admin", "Uploads, indexes, and manages the source documents used as the knowledge base.")
+Person(platform_eng, "Platform Engineer", "Deploys and operates the GenAI platform, monitors quality and cost.")
+
+System(rag_platform, "GenAI RAG Platform", "Combines a large language model with a private knowledge base to deliver accurate, cited answers grounded in organisational documents. Built on Azure OpenAI Service and Azure AI Search.")
+
+System_Ext(llm_api, "LLM API", "Hosted large language model used for text generation and embedding (e.g. Azure OpenAI GPT-4o, Google Gemini, Anthropic Claude).")
+System_Ext(doc_source, "Document Sources", "Internal repositories containing source documents: SharePoint, Confluence, S3 buckets, or local file shares.")
+System_Ext(auth_provider, "Identity Provider", "OAuth 2.0 / OIDC provider for user authentication (e.g. Azure AD, Okta).")
+
+Rel(end_user, rag_platform, "Asks questions via chat interface", "HTTPS")
+Rel(knowledge_admin, rag_platform, "Manages document uploads and indexing", "HTTPS")
+Rel(platform_eng, rag_platform, "Monitors quality, cost, and deployments", "HTTPS")
+
+Rel(rag_platform, llm_api, "Sends prompts, receives completions and embeddings", "HTTPS / REST")
+Rel(rag_platform, doc_source, "Pulls documents for ingestion", "HTTPS / SDK")
+Rel(rag_platform, auth_provider, "Validates user identity", "HTTPS / OIDC")
+
+@enduml

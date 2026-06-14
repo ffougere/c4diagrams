@@ -1,0 +1,23 @@
+@startuml azure-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context – Azure E-Commerce Platform
+
+Person(customer, "Customer", "A registered or guest user browsing and purchasing products.")
+Person(admin, "Back-Office Admin", "Manages products, orders, and user accounts.")
+
+System(ecommerce, "E-Commerce Platform", "Enables customers to browse a catalogue, place orders, and track deliveries. Hosted entirely on Microsoft Azure.")
+
+System_Ext(payment, "Payment Gateway", "Third-party payment processor (e.g. Stripe or Adyen).")
+System_Ext(shipping, "Shipping Provider", "External logistics API for delivery tracking (e.g. DHL, FedEx).")
+System_Ext(email, "Email Service", "Transactional email delivery (e.g. SendGrid).")
+
+Rel(customer, ecommerce, "Browses catalogue, places orders", "HTTPS")
+Rel(admin, ecommerce, "Manages inventory and orders", "HTTPS")
+Rel(ecommerce, payment, "Processes payments", "HTTPS / REST")
+Rel(ecommerce, shipping, "Requests delivery & tracking", "HTTPS / REST")
+Rel(ecommerce, email, "Sends order confirmations and notifications", "HTTPS / REST")
+
+@enduml

@@ -1,0 +1,28 @@
+@startuml multicloud-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context – Multi-Cloud Financial Services Platform
+
+Person(retail_customer, "Retail Customer", "Performs banking operations via web or mobile app.")
+Person(corporate_user, "Corporate User", "Accesses treasury and payments services.")
+Person(ops_team, "Operations Team", "Monitors platform health across all cloud providers.")
+
+System(platform, "Financial Services Platform", "Core banking and payments platform distributed across Azure (primary), AWS (DR / secondary region), and GCP (analytics & AI). Designed for high availability and regulatory compliance.")
+
+System_Ext(swift, "SWIFT Network", "Interbank messaging for cross-border payments.")
+System_Ext(open_banking, "Open Banking APIs", "Third-party PSD2-compliant financial data providers.")
+System_Ext(regulator, "Regulatory Reporting System", "Compliance and regulatory submission endpoint.")
+System_Ext(fraud_partner, "Fraud Intelligence Network", "External threat feed for real-time fraud signals.")
+
+Rel(retail_customer, platform, "Manages accounts and transfers", "HTTPS")
+Rel(corporate_user, platform, "Submits bulk payments and treasury ops", "HTTPS / mTLS")
+Rel(ops_team, platform, "Monitors and operates the platform", "HTTPS")
+
+Rel(platform, swift, "Sends / receives interbank messages", "SWIFT / MQ")
+Rel(platform, open_banking, "Consumes third-party financial data", "HTTPS / OAuth2")
+Rel(platform, regulator, "Submits regulatory reports", "HTTPS / SFTP")
+Rel(platform, fraud_partner, "Queries fraud intelligence", "HTTPS / REST")
+
+@enduml

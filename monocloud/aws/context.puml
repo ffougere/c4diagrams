@@ -1,0 +1,25 @@
+@startuml aws-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context – AWS Serverless SaaS Platform
+
+Person(end_user, "End User", "Uses the SaaS application via a web browser or mobile app.")
+Person(tenant_admin, "Tenant Admin", "Configures the SaaS workspace and manages team members.")
+Person(platform_ops, "Platform Operator", "Monitors infrastructure health, manages deployments, and handles incidents.")
+
+System(saas, "Serverless SaaS Platform", "Multi-tenant, event-driven SaaS application built on AWS serverless and managed services.")
+
+System_Ext(idp, "Enterprise Identity Provider", "Customer's corporate IdP for SSO (e.g. Okta, Azure AD).")
+System_Ext(marketplace, "AWS Marketplace", "Subscription and billing entitlement for SaaS customers.")
+System_Ext(webhook_target, "Customer Webhook Endpoint", "External HTTP endpoint that receives real-time event notifications.")
+
+Rel(end_user, saas, "Uses the application", "HTTPS")
+Rel(tenant_admin, saas, "Configures workspace and users", "HTTPS")
+Rel(platform_ops, saas, "Monitors and operates the platform", "HTTPS / AWS Console")
+Rel(saas, idp, "Federates authentication via SAML / OIDC", "HTTPS")
+Rel(saas, marketplace, "Manages subscription entitlements", "AWS Marketplace API")
+Rel(saas, webhook_target, "Delivers event notifications", "HTTPS / REST")
+
+@enduml
